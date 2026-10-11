@@ -1,0 +1,11 @@
+# Daksh pins exact versions in the skeleton PR (pip freeze), after pip-audit passes (R-15).
+Flask
+Flask-SQLAlchemy
+Flask-JWT-Extended
+bcrypt
+cryptography
+pyotp
+Flask-Limiter
+pyOpenSSL
+pytest
+pip-audit
