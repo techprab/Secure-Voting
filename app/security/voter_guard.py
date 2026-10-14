@@ -59,8 +59,8 @@ def begin_single_cast(voter_id: int) -> str:
     try:
         db.session.add(row)
         db.session.flush()  # Moved inside try/except per Daksh's review
-    except IntegrityError:
+    except IntegrityError as exc:
         db.session.rollback()
-        raise AlreadyVotedError()
+        raise AlreadyVotedError() from exc
         
     return code
