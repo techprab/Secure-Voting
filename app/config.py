@@ -26,3 +26,4 @@ class TestConfig(Config):
     JWT_SECRET_KEY = "test-jwt-secret"
     REQUIRE_HTTPS = False
     RATELIMIT_ENABLED = False
+    BALLOT_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="

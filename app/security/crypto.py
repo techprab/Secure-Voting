@@ -10,6 +10,7 @@ import hashlib
 import json
 import hmac
 import os
+from flask import current_app
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -23,8 +24,8 @@ KEY_SIZE = 32
 
 
 def _get_ballot_key() -> bytes:
-    """Load a 32-byte AES key encoded as Base64 in BALLOT_KEY."""
-    encoded_key = os.getenv("BALLOT_KEY", "").strip()
+    """Load a 32-byte AES key encoded as Base64 in Flask config."""
+    encoded_key = current_app.config.get("BALLOT_KEY", "").strip()
 
     if not encoded_key:
         raise ValueError("BALLOT_KEY is not configured.")
