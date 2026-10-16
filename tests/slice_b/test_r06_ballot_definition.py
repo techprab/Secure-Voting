@@ -101,3 +101,16 @@ def test_r06_ineligible_voter_403(division, get_ballot):
     db.session.get(models.Voter, voter_id).eligible = False
     db.session.commit()
     assert get_ballot(voter_id).status_code == 403
+
+
+def test_r06_submit_refused_on_mismatch(division, preview, client, auth, counts):
+    voter, prefs = division["voters"][0], division["candidates"]
+    token = preview(voter, prefs).get_json()["preview_token"]
+
+    _edit_candidate(division["candidates"][0], name="Alpha (edited)")
+    r = client.post("/ballot/submit", headers=auth(voter_id=voter), json={
+        "preferences": prefs, "preview_token": token, "confirm": True,
+        "nonce": "6f1c2a52-3a43-4d6b-9a52-3f0f5f0c1a11"})
+    assert r.status_code == 503
+    assert r.get_json() == MISMATCH
+    assert counts() == {"pending": 0, "sealed": 0, "participation": 0}
