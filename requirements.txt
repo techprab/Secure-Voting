@@ -9,3 +9,4 @@ Flask-Limiter
 pyOpenSSL
 pytest
 pip-audit
+python-dotenv
