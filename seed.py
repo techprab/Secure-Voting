@@ -14,7 +14,7 @@ import base64
 import secrets
 from datetime import date, datetime, timedelta, timezone
 
-from werkzeug.security import generate_password_hash
+import bcrypt
 
 from app import create_app, db
 from app.models import (
@@ -50,9 +50,10 @@ def ensure_staff(role):
         staff = Staff(
             username=username,
             role=role,
-            password_hash=generate_password_hash(
-                f"LocalOnly-{role}-{secrets.token_urlsafe(12)}"
-            ),
+            password_hash=bcrypt.hashpw(
+                f"LocalOnly-{role}-{secrets.token_urlsafe(12)}".encode("utf-8"),
+                bcrypt.gensalt(),
+                ).decode("utf-8"),
             # Local development placeholder only.
             # Replace with a properly provisioned TOTP secret if testing MFA.
             totp_secret="JBSWY3DPEHPK3PXP",
@@ -113,9 +114,10 @@ def ensure_voters():
         demo_voter.division = DIVISIONS[0]
         demo_voter.eligible = True
         demo_voter.overseas = True
-        demo_voter.password_hash = generate_password_hash(
-            "LocalOnly-Voter-ChangeMe"
-        )
+        demo_voter.password_hash=bcrypt.hashpw(
+            b"LocalOnly-Voter-ChangeMe",
+            bcrypt.gensalt(),
+            ).decode("utf-8"),
 
     for division_index, division in enumerate(DIVISIONS):
         for number in range(1, VOTERS_PER_DIVISION + 1):
