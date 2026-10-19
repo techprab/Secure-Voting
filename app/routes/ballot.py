@@ -17,7 +17,7 @@ from ..models import Participation, PendingBallot, Voter
 from ..security.crypto import seal_ballot
 from ..security.voter_guard import begin_single_cast, consume_nonce, require_voter
 from ..services.ballot_def import check_ballot_definition, current_candidates
-from ..services.ballots import flush_pending
+from ..services.ballots import commit_with_seal
 
 bp = Blueprint("ballot", __name__)
 
@@ -127,8 +127,7 @@ def ballot_submit():
     consume_nonce(nonce)
     code = begin_single_cast(voter.id)
     db.session.add(PendingBallot(division=voter.division, blob=seal_ballot(preferences)))
-    flush_pending(voter.division)
-    db.session.commit()
+    commit_with_seal(voter.division)
     return jsonify(participation_code=code), 201
 
 
