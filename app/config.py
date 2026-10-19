@@ -23,7 +23,7 @@ class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite://"
     SECRET_KEY = "test-secret"
-    JWT_SECRET_KEY = "test-jwt-secret"
+    JWT_SECRET_KEY = "test-jwt-secret-key-at-least-32-bytes"
     REQUIRE_HTTPS = False
     RATELIMIT_ENABLED = False
     BALLOT_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
