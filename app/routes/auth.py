@@ -5,6 +5,7 @@ from datetime import timedelta
 from .. import db, limiter
 from ..models import Voter
 from ..config import Config
+from ..security.voter_guard import voter_session_token
 
 # This MUST be called 'bp' to match app/__init__.py
 bp = Blueprint('auth', __name__)
@@ -13,11 +14,14 @@ bp = Blueprint('auth', __name__)
 @bp.route('/auth/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return {"error": "invalid_request"}, 400
     username = data.get('username')
     password = data.get('password')
 
-    if not username or not password:
+    if (not isinstance(username, str) or not username
+            or not isinstance(password, str) or not password):
         return {"error": "missing_credentials"}, 400
 
     # R-13: Overseas fail-closed check
@@ -32,14 +36,18 @@ def login():
     if not voter or not bcrypt.checkpw(password.encode('utf-8'), voter.password_hash.encode('utf-8')):
         return {"error": "unauthorized"}, 401
 
-    # R-03: Issue a 15-minute session token
-    token = create_access_token(
-        identity=str(voter.id),
-        additional_claims={"type": "voter", "division": voter.division},
-        expires_delta=timedelta(minutes=15)
-    )
+    if not voter.eligible:
+        return {"error": "ineligible_voter"}, 403
 
-    return jsonify({"token": token, "voter_id": voter.id, "division": voter.division}), 200
+    token = voter_session_token(voter)
+    response = jsonify({
+        "token": token,
+        "voter_id": voter.id,
+        "division": voter.division,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
 
 
 def is_overseas_request(client_ip):
