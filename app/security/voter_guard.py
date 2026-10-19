@@ -87,12 +87,20 @@ def require_voter(fn):
 
 
 def consume_nonce(nonce: str) -> None:
-    # R-04: records nonce; raises ReplayError if seen before
-    if db.session.get(UsedNonce, nonce):
-        append_audit(action="replay", actor_id=None)
-        raise ReplayError()
-    db.session.add(UsedNonce(nonce=nonce))
-    db.session.flush()
+    """Reserve a nonce in the ballot transaction without committing it."""
+    try:
+        db.session.add(UsedNonce(nonce=nonce))
+        db.session.flush()
+    except IntegrityError as exc:
+        # A failed flush must be rolled back before querying again.
+        # This also discards any other writes in the failed transaction.
+        db.session.rollback()
+        if db.session.get(UsedNonce, nonce) is None:
+            # Do not mislabel an unrelated database error as a replay.
+            raise
+        current_app.logger.warning("R-04: replay submission rejected")
+        raise ReplayError() from exc
+
 
 def begin_single_cast(voter_id: int) -> str:
     # R-01: adds Participation(voter_id) in the current transaction
