@@ -108,3 +108,21 @@ def test_r04_nonce_reservation_rolls_back_with_transaction(app):
         consume_nonce(nonce)
         db.session.commit()
         assert db.session.query(UsedNonce).count() == 1
+
+
+def test_r04_replay_keeps_other_pending_work(app):
+    with app.app_context():
+        first = str(uuid.uuid4())
+        consume_nonce(first)
+        db.session.commit()
+
+        other = str(uuid.uuid4())
+        consume_nonce(other)  # pending work in the caller's transaction
+
+        with pytest.raises(ReplayError):
+            consume_nonce(first)
+
+        # Only the duplicate insert was undone.
+        assert db.session.get(UsedNonce, other) is not None
+        db.session.commit()
+        assert db.session.query(UsedNonce).count() == 2
