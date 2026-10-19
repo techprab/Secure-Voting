@@ -92,13 +92,13 @@ def require_voter(fn):
 
 def consume_nonce(nonce: str) -> None:
     """Reserve a nonce in the ballot transaction without committing it."""
+    # The savepoint undoes only this insert on a duplicate. The caller's other
+    # work stays in the transaction; the ballot route owns the full rollback.
     try:
-        db.session.add(UsedNonce(nonce=nonce))
-        db.session.flush()
+        with db.session.begin_nested():
+            db.session.add(UsedNonce(nonce=nonce))
     except IntegrityError as exc:
-        # A failed flush must be rolled back before querying again.
-        # This also discards any other writes in the failed transaction.
-        db.session.rollback()
+        # The primary key decides replays, including two racing requests.
         if db.session.get(UsedNonce, nonce) is None:
             # Do not mislabel an unrelated database error as a replay.
             raise
