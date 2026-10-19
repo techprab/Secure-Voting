@@ -68,3 +68,24 @@ def test_r01_failed_submission_rolls_back_and_can_retry(
     assert after["pending"] + after["sealed"] == (
         before["pending"] + before["sealed"] + 1
     )
+
+
+def test_r01_rejected_second_cast_keeps_other_pending_work(division):
+    from app.errors import AlreadyVotedError
+    from app.security.voter_guard import begin_single_cast
+
+    voter = division["voters"][0]
+    begin_single_cast(voter)
+    db.session.commit()
+
+    nonce = str(uuid.uuid4())
+    db.session.add(UsedNonce(nonce=nonce))
+    db.session.flush()
+
+    with pytest.raises(AlreadyVotedError):
+        begin_single_cast(voter)
+
+    # Only the failed insert was undone; the earlier pending work survives.
+    assert db.session.get(UsedNonce, nonce) is not None
+    db.session.commit()
+    assert Participation.query.filter_by(voter_id=voter).count() == 1
