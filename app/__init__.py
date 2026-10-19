@@ -15,6 +15,11 @@ def create_app(config_object=Config):
     app.config.from_object(config_object)
 
     db.init_app(app)
+
+    # Register before the first database connection is opened.
+    from .sqlite_transactions import configure_sqlite_transactions
+    with app.app_context():
+        configure_sqlite_transactions(db.engine)
     jwt.init_app(app)
     limiter.init_app(app)
 
