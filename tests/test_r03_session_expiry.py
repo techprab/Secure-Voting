@@ -186,3 +186,23 @@ def test_r03_route_exception_does_not_renew(client, app, session_setup):
     response = client.get("/_test/session-raise", headers=headers(token))
     assert response.status_code == 500
     assert "X-Session-Token" not in response.headers
+
+
+@pytest.mark.parametrize("stored", ["", "unused", "not-a-bcrypt-hash", "$2b$12$short"])
+def test_r03_malformed_password_hash_is_a_controlled_401(
+    client, app, session_setup, stored
+):
+    with app.app_context():
+        db.session.get(Voter, session_setup).password_hash = stored
+        db.session.commit()
+    response = login(client)
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "unauthorized"}
+
+
+def test_r03_overlong_password_is_a_controlled_401(client, session_setup):
+    response = client.post("/auth/login", json={
+        "username": "r03_voter",
+        "password": "x" * 100,
+    })
+    assert response.status_code == 401
