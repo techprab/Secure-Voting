@@ -10,3 +10,4 @@ pyOpenSSL
 pytest
 pip-audit
 python-dotenv
+redis==8.1.0
