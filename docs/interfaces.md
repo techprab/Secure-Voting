@@ -169,3 +169,18 @@ pytest -q
 ```
 
 `requirements.txt`: Flask, Flask-SQLAlchemy, Flask-JWT-Extended, bcrypt, cryptography, pyotp, Flask-Limiter, pyOpenSSL, pytest, pip-audit — Daksh pins versions after `pip-audit` passes.
+
+
+## Session renewal contract (R-03)
+
+- `POST /auth/login` returns `{token, voter_id, division}` with `Cache-Control: no-store`.
+- Every successful (2xx) request to a route protected by `require_voter` returns a fresh token in the `X-Session-Token` response header. The client must store it and send it on the next request.
+- Failed requests do not return a new token, so the old token keeps its original expiry.
+- A token lasts 15 minutes from the last successful request, capped at `WINDOW_CLOSE`. After the window closes, requests get 401. A missing or invalid `WINDOW_CLOSE` gets 503.
+- A deadline with no timezone is read as UTC.
+
+## R-13 status: partially implemented
+
+- Done: an overseas voter's request is allowed only if the client IP is inside a `MISSION_ALLOWLIST` network (CIDR membership) and the server environment reports `SSL_CLIENT_VERIFY=SUCCESS` with a fingerprint listed in `MISSION_CERTS`. Missing or invalid configuration denies the request.
+- Not done: the TLS server that verifies client certificates is not deployed. Those two values must come from that trusted adapter, never from HTTP headers. Until it exists, overseas requests fail closed.
+- Out of scope: the physical location of domestic accounts is not checked.
