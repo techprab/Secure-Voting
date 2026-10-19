@@ -1,3 +1,4 @@
+from .mission_guard import mission_access_allowed
 """STUBS owned by Dev (Slice A). Do not treat as production security."""
 from functools import wraps
 from flask import g, current_app, make_response, abort
@@ -70,6 +71,9 @@ def require_voter(fn):
             return {"error": "unauthorized"}, 401
         if not voter.eligible:
             return {"error": "ineligible_voter"}, 403
+
+        if not mission_access_allowed(voter):
+            return {"error": "mission_access_denied"}, 403
 
         # Keep the integer interface used by the ballot routes.
         g.voter = voter.id

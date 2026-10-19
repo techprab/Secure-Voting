@@ -4,7 +4,7 @@ import bcrypt
 from datetime import timedelta
 from .. import db, limiter
 from ..models import Voter
-from ..config import Config
+from ..security.mission_guard import mission_access_allowed
 from ..security.voter_guard import voter_session_token
 
 # This MUST be called 'bp' to match app/__init__.py
@@ -24,13 +24,6 @@ def login():
             or not isinstance(password, str) or not password):
         return {"error": "missing_credentials"}, 400
 
-    # R-13: Overseas fail-closed check
-    client_ip = request.remote_addr
-    if is_overseas_request(client_ip):
-        cert_header = request.headers.get('X-Client-Cert')
-        if not cert_header or cert_header not in Config.MISSION_CERTS:
-            return {"error": "forbidden"}, 403
-
     voter = Voter.query.filter_by(name=username).first()
 
     if not voter or not bcrypt.checkpw(password.encode('utf-8'), voter.password_hash.encode('utf-8')):
@@ -38,6 +31,9 @@ def login():
 
     if not voter.eligible:
         return {"error": "ineligible_voter"}, 403
+
+    if not mission_access_allowed(voter):
+        return {"error": "mission_access_denied"}, 403
 
     token = voter_session_token(voter)
     response = jsonify({
@@ -47,18 +43,3 @@ def login():
     })
     response.headers["Cache-Control"] = "no-store"
     return response, 200
-
-
-
-def is_overseas_request(client_ip):
-    # R-13: Fail-closed logic
-    # Localhost / test client should not be treated as overseas
-    if client_ip in ("127.0.0.1", "localhost", "::1") or client_ip.startswith("127."):
-        return False
-    # If allowlist is empty, everything else is overseas (fail closed)
-    if not Config.MISSION_ALLOWLIST:
-        return True
-    for cidr in Config.MISSION_ALLOWLIST:
-        if client_ip.startswith(cidr.split('/')[0].rsplit('.', 1)[0]):
-            return False
-    return True
