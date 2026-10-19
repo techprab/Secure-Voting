@@ -119,11 +119,13 @@ def begin_single_cast(voter_id: int) -> str:
         voted_hour=voted_hour,
     )
     
+    # Only this insert is undone on a duplicate (savepoint). Work already done
+    # in the caller's transaction, such as the consumed nonce, is left alone.
+    # The ballot route rolls back the whole submission when this raises.
     try:
-        db.session.add(row)
-        db.session.flush()  # Moved inside try/except per Daksh's review
+        with db.session.begin_nested():
+            db.session.add(row)
     except IntegrityError as exc:
-        db.session.rollback()
         raise AlreadyVotedError() from exc
         
     return code
