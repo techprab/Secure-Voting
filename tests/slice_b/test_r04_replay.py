@@ -108,3 +108,42 @@ def test_r04_nonce_reservation_rolls_back_with_transaction(app):
         consume_nonce(nonce)
         db.session.commit()
         assert db.session.query(UsedNonce).count() == 1
+
+
+def test_r04_replay_keeps_other_pending_work(app):
+    with app.app_context():
+        first = str(uuid.uuid4())
+        consume_nonce(first)
+        db.session.commit()
+
+        other = str(uuid.uuid4())
+        consume_nonce(other)  # pending work in the caller's transaction
+
+        with pytest.raises(ReplayError):
+            consume_nonce(first)
+
+        # Only the duplicate insert was undone.
+        assert db.session.get(UsedNonce, other) is not None
+        db.session.commit()
+        assert db.session.query(UsedNonce).count() == 2
+
+
+def test_r04_preserved_work_remains_reversible(app):
+    with app.app_context():
+        committed = str(uuid.uuid4())
+        consume_nonce(committed)
+        db.session.commit()
+
+        pending = str(uuid.uuid4())
+        consume_nonce(pending)
+
+        with pytest.raises(ReplayError):
+            consume_nonce(committed)
+
+        # Duplicate rejection must preserve the caller's pending work.
+        assert db.session.get(UsedNonce, pending) is not None
+
+        # Preserved work must not have been committed by the savepoint.
+        db.session.rollback()
+        assert db.session.get(UsedNonce, pending) is None
+        assert db.session.get(UsedNonce, committed) is not None
