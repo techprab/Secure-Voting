@@ -1,3 +1,5 @@
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+from flask_limiter.util import get_remote_address
 """Ballot routes. Owner: Jaewook (Slice B).
 
 R-06: GET /ballot serves the candidate list only if it matches the last approved set.
@@ -12,7 +14,7 @@ from datetime import timedelta
 from flask import Blueprint, abort, g, jsonify, request
 from flask_jwt_extended import create_access_token, decode_token
 
-from .. import db
+from .. import db, limiter
 from ..models import Participation, PendingBallot, Voter
 from ..security.crypto import seal_ballot
 from ..security.voter_guard import begin_single_cast, consume_nonce, require_voter
@@ -88,7 +90,16 @@ def ballot_preview():
     return jsonify(summary=summary, preview_token=token), 200
 
 
+def submission_voter_key():
+    # Verify the signature before using identity as a rate-limit key.
+    # Use voter identity, not the rotating session token.
+    verify_jwt_in_request()
+    return "voter:" + str(get_jwt_identity())
+
+
 @bp.post("/ballot/submit")
+@limiter.limit("30 per minute", key_func=get_remote_address)
+@limiter.limit("10 per minute", key_func=submission_voter_key)
 @require_voter
 def ballot_submit():
     voter = current_voter()
@@ -133,6 +144,7 @@ def ballot_submit():
 
 
 @bp.get("/participation/<code>")
+@limiter.limit("30 per minute", key_func=get_remote_address)
 def participation(code):
     """Receipt check: says only that the code exists. No voter, time or ranking is returned."""
     if Participation.query.filter_by(code=code).first() is None:
