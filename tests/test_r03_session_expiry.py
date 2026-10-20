@@ -23,6 +23,16 @@ def session_setup(app):
     def session_error():
         return {"error": "test_error"}, 400
 
+    @app.get("/_test/session-204")
+    @require_voter
+    def session_no_content():
+        return "", 204
+
+    @app.get("/_test/session-raise")
+    @require_voter
+    def session_raises():
+        raise RuntimeError("simulated route failure")
+
     with app.app_context():
         voter = Voter(
             name="r03_voter",
@@ -161,3 +171,38 @@ def test_r03_invalid_window_fails_closed(
     assert client.get(
         "/_test/session", headers=headers(token)
     ).status_code == 503
+
+
+def test_r03_no_content_success_also_renews(client, app, session_setup):
+    token = token_for(app, session_setup)
+    response = client.get("/_test/session-204", headers=headers(token))
+    assert response.status_code == 204
+    assert response.headers["X-Session-Token"]
+
+
+def test_r03_route_exception_does_not_renew(client, app, session_setup):
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+    token = token_for(app, session_setup)
+    response = client.get("/_test/session-raise", headers=headers(token))
+    assert response.status_code == 500
+    assert "X-Session-Token" not in response.headers
+
+
+@pytest.mark.parametrize("stored", ["", "unused", "not-a-bcrypt-hash", "$2b$12$short"])
+def test_r03_malformed_password_hash_is_a_controlled_401(
+    client, app, session_setup, stored
+):
+    with app.app_context():
+        db.session.get(Voter, session_setup).password_hash = stored
+        db.session.commit()
+    response = login(client)
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "unauthorized"}
+
+
+def test_r03_overlong_password_is_a_controlled_401(client, session_setup):
+    response = client.post("/auth/login", json={
+        "username": "r03_voter",
+        "password": "x" * 100,
+    })
+    assert response.status_code == 401
