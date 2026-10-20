@@ -10,6 +10,7 @@ from functools import wraps
 from flask import Blueprint, g, jsonify, make_response
 
 from .. import db
+from ..security.crypto import verify_chain
 from ..security.staff_guard import audited, require_staff
 from ..services.count import UnknownDivision, count_a, write_display_cache
 
@@ -39,6 +40,9 @@ def _commit_on_success(fn):
 @_commit_on_success
 @audited("recount")
 def recount(division):
+    # R-10 before R-12: refuse to count a ballot store whose hash chain has been altered.
+    if not verify_chain():
+        return jsonify(error="chain_broken"), 409
     try:
         totals = count_a(division)
     except UnknownDivision:
