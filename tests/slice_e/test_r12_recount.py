@@ -1,9 +1,10 @@
 """R-12: a recount re-processes the sealed source ballots, never a cached tally."""
+import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app import db
-from app.models import Ballot, Candidate, CountCache
+from app.models import AuditLog, Ballot, Candidate, CountCache
 from app.security.crypto import chain_hash
 from app.services.count import count_a
 
@@ -101,6 +102,37 @@ def test_r12_broken_chain_stops_recount(client, candidates, add_ballots, staff_t
     assert resp.status_code == 409
     assert resp.get_json()["error"] == "chain_broken"
     assert CountCache.query.filter_by(division=DIVISION).count() == 0
+
+
+@pytest.mark.parametrize("position", ["first", "middle"])
+def test_r12_deleted_ballot_breaks_chain_and_stops_recount(
+        client, candidates, add_ballots, staff_token, auth, position):
+    """Deleting the first or a middle ballot leaves the next row pointing at a hash that
+    no longer exists, so verify_chain fails. (Deleting only the last row would not show:
+    no later link refers to it. The count and seal records cover that case, not R-12.)"""
+    a, b, c = candidates
+    add_ballots([[a, b, c], [b, c, a], [c, a, b], [a, c, b], [b, a, c]])
+    headers = auth(staff_token("officer"))
+
+    first = client.post(f"/count/recount/{DIVISION}", headers=headers)
+    assert first.status_code == 200
+    cache_before = {r.candidate_id: r.votes for r in CountCache.query.filter_by(division=DIVISION)}
+    recounts_before = AuditLog.query.filter_by(action="recount").count()
+
+    rows = Ballot.query.order_by(Ballot.id).all()
+    victim = rows[0] if position == "first" else rows[len(rows) // 2]
+    db.session.delete(victim)
+    db.session.commit()
+
+    resp = client.post(f"/count/recount/{DIVISION}", headers=headers)
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "chain_broken"
+    assert "totals" not in resp.get_json()
+    db.session.expire_all()
+    cache_after = {r.candidate_id: r.votes for r in CountCache.query.filter_by(division=DIVISION)}
+    assert cache_after == cache_before
+    assert AuditLog.query.filter_by(action="recount").count() == recounts_before
 
 
 def test_r12_recount_needs_officer_with_mfa(client, candidates, staff_token, auth):
