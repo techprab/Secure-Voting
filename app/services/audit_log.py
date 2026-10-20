@@ -1,4 +1,3 @@
-
 """Append and verify a tamper-evident audit log."""
 import hashlib
 import json
@@ -28,37 +27,36 @@ def append_audit(
     before=None,
     after=None,
 ) -> None:
+    """Append an audit entry without committing the caller's transaction."""
     if not isinstance(action, str) or not action.strip():
         raise ValueError("action must be a non-empty string")
 
     before_json = None if before is None else _canonical_json(before)
     after_json = None if after is None else _canonical_json(after)
 
-    try:
-        previous = AuditLog.query.order_by(AuditLog.id.desc()).first()
-        previous_hash = previous.hash if previous else GENESIS_HASH
-        timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+    previous = AuditLog.query.order_by(AuditLog.id.desc()).first()
+    previous_hash = previous.hash if previous else GENESIS_HASH
+    timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        payload = _entry_payload(
-            actor_id, action, before, after, timestamp
-        )
-        entry_hash = hashlib.sha256(
-            (previous_hash + payload).encode("utf-8")
-        ).hexdigest()
+    payload = _entry_payload(
+        actor_id, action, before, after, timestamp
+    )
+    entry_hash = hashlib.sha256(
+        (previous_hash + payload).encode("utf-8")
+    ).hexdigest()
 
-        db.session.add(AuditLog(
-            actor_id=actor_id,
-            action=action,
-            before=before_json,
-            after=after_json,
-            ts=timestamp,
-            prev_hash=previous_hash,
-            hash=entry_hash,
-        ))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        raise
+    db.session.add(AuditLog(
+        actor_id=actor_id,
+        action=action,
+        before=before_json,
+        after=after_json,
+        ts=timestamp,
+        prev_hash=previous_hash,
+        hash=entry_hash,
+    ))
+
+    # Leave commit and rollback to the caller.
+    db.session.flush()
 
 
 def verify_audit_log_details() -> dict:
