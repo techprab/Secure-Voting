@@ -26,7 +26,7 @@ def login():
 
     voter = Voter.query.filter_by(name=username).first()
 
-    if not voter or not bcrypt.checkpw(password.encode('utf-8'), voter.password_hash.encode('utf-8')):
+    if not voter or not password_matches(password, voter.password_hash):
         return {"error": "unauthorized"}, 401
 
     if not voter.eligible:
@@ -43,3 +43,13 @@ def login():
     })
     response.headers["Cache-Control"] = "no-store"
     return response, 200
+
+
+
+def password_matches(password, stored_hash):
+    # A malformed stored hash or an over-long password makes bcrypt raise.
+    # Treat both as a failed login instead of a server error.
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+    except (ValueError, TypeError, AttributeError):
+        return False
