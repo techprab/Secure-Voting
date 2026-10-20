@@ -268,3 +268,50 @@ def test_r18_admin_without_mfa_cannot_recertify(
     )
 
     assert response.status_code == 403
+
+
+def test_r18_recertification_audit_persists_after_request(
+    app, client, staff_token
+):
+    with app.app_context():
+        admin = models.Staff(
+            username=f"admin-{uuid.uuid4().hex[:8]}",
+            role="admin",
+            password_hash="unused",
+            totp_secret="unused",
+            recertified_until=date.today() + timedelta(days=30),
+        )
+        target = models.Staff(
+            username=f"target-{uuid.uuid4().hex[:8]}",
+            role="auditor",
+            password_hash="unused",
+            totp_secret="unused",
+            recertified_until=date.today() + timedelta(days=5),
+        )
+        db.session.add_all([admin, target])
+        db.session.commit()
+
+        admin_id = admin.id
+        target_id = target.id
+        token = staff_token(
+            role="admin", mfa=True, staff_id=admin_id
+        )
+
+    # Make a real HTTP request; the client finishes the request lifecycle.
+    response = client.post(
+        f"/staff/{target_id}/recertify",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    # Query in a fresh app context after the request has finished.
+    with app.app_context():
+        audit_entry = models.AuditLog.query.filter_by(
+            action="recertify",
+            actor_id=admin_id,
+        ).order_by(models.AuditLog.id.desc()).first()
+
+        assert audit_entry is not None
+        assert audit_entry.action == "recertify"
+        assert audit_entry.actor_id == admin_id

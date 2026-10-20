@@ -54,14 +54,21 @@ def require_staff(*roles: str, mfa: bool = True):
         return wrapper
     return decorator
 
-
 def audited(action: str):
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             result = fn(*args, **kwargs)
-            # STUB: successful-response handling and before/after values need implementation.
-            append_audit(action, getattr(getattr(g, "staff", None), "id", None))
+
+            # Record the audit entry in the current transaction.
+            append_audit(
+                action,
+                getattr(getattr(g, "staff", None), "id", None),
+            )
+
+            # Persist the audit entry before the request session is removed.
+            db.session.commit()
+
             return result
         return wrapper
     return decorator
