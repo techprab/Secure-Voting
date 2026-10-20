@@ -21,13 +21,28 @@ def require_staff(*roles: str, mfa: bool = True):
         return wrapper
     return decorator
 
+
 def audited(action: str):
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
+            from flask import make_response
+
             result = fn(*args, **kwargs)
-            # STUB: successful-response handling and before/after values need implementation.
-            append_audit(action, getattr(getattr(g, "staff", None), "id", None))
+            response = make_response(result)
+
+            # Record only successful responses (HTTP status below 400).
+            if response.status_code < 400:
+                staff = getattr(g, "staff", None)
+                actor_id = getattr(staff, "id", None)
+
+                append_audit(
+                    action,
+                    actor_id,
+                    before=g.get("audit_before"),
+                    after=g.get("audit_after"),
+                )
+
             return result
         return wrapper
     return decorator
