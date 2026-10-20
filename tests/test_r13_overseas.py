@@ -139,3 +139,14 @@ def test_r13_existing_token_still_requires_mission_checks(
         environ_overrides=trusted_env(),
     )
     assert allowed.status_code == 200
+
+
+@pytest.mark.parametrize("ip,status", [
+    ("203.0.113.7", 403),
+    ("203.0.113.8", 200),
+    ("203.0.113.15", 200),
+    ("203.0.113.16", 403),
+])
+def test_r13_cidr_edges_allow_and_deny(client, app, mission_setup, ip, status):
+    app.config["MISSION_ALLOWLIST"] = "203.0.113.8/29"
+    assert login(client, trusted_env(ip)).status_code == status
