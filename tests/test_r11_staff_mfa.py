@@ -1,20 +1,24 @@
-
 from datetime import date, timedelta
 import uuid
 
+import bcrypt
 import pyotp
-from flask_jwt_extended import decode_token
-from werkzeug.security import generate_password_hash
+from flask_jwt_extended import create_access_token, decode_token
 
 from app import db, models
 
 
 def create_staff():
     """Create a staff account for an authentication test."""
+    password_hash = bcrypt.hashpw(
+        b"CorrectPassword123!",
+        bcrypt.gensalt(),
+    ).decode("utf-8")
+
     staff = models.Staff(
         username=f"auditor-{uuid.uuid4().hex[:8]}",
         role="auditor",
-        password_hash=generate_password_hash("CorrectPassword123!"),
+        password_hash=password_hash,
         totp_secret="JBSWY3DPEHPK3PXP",
         recertified_until=date.today() + timedelta(days=30),
     )
@@ -156,12 +160,17 @@ def test_r11_mfa_rejects_missing_token(client):
 
     assert response.status_code == 401
 
+
 def test_r11_mfa_rejects_already_authenticated_staff_token(
     app, client, staff_token
 ):
     with app.app_context():
         staff = create_staff()
-        token = staff_token(role="auditor", mfa=True, staff_id=staff.id)
+        token = staff_token(
+            role="auditor",
+            mfa=True,
+            staff_id=staff.id,
+        )
 
     response = client.post(
         "/staff/mfa",
@@ -187,9 +196,6 @@ def test_r11_mfa_rejects_voter_token(client, voter_token):
 def test_r11_mfa_rejects_expired_password_stage_token(
     app, client
 ):
-    from datetime import timedelta
-    from flask_jwt_extended import create_access_token
-
     with app.app_context():
         token = create_access_token(
             identity="1",
