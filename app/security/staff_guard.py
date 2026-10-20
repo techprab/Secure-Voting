@@ -1,9 +1,14 @@
+
 """STUBS owned by Riya (Slice C)."""
 from datetime import date
 from functools import wraps
 
 from flask import g
-from flask_jwt_extended import verify_jwt_in_request, get_jwt, get_jwt_identity
+from flask_jwt_extended import (
+    verify_jwt_in_request,
+    get_jwt,
+    get_jwt_identity,
+)
 
 from .. import db
 from ..models import Staff
@@ -76,6 +81,11 @@ def audited(action: str):
                     after=g.get("audit_after"),
                 )
 
+                # Persist the audit entry before request teardown.
+                db.session.commit()
+
             return result
+
         return wrapper
+
     return decorator
