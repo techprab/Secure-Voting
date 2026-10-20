@@ -29,8 +29,8 @@ The tests verify:
 2. Two application processes share one allowance during a 40-request burst.
 
 Observed local results:
-- 2 shared-storage tests passed.
-- Full branch suite: 83 passed.
+- 4 shared-storage tests passed.
+- Full branch suite: 85 passed.
 - Burst: 10 requests reached validation; 30 received HTTP 429.
 - Burst elapsed time: 0.45 seconds, including process startup.
 
@@ -50,3 +50,19 @@ capacity testing remain outstanding. R-20 is therefore partially met.
 
 If redis-server is absent, these tests are skipped. A skipped run is not
 evidence that shared-storage behaviour passed.
+
+## Additional valid-ballot and CI checks
+A valid voter on a separate IP successfully submitted a confirmed ballot
+while a 40-request burst was scheduled in another application process.
+The valid submission created one participation record, one ballot and
+one nonce. Each process used an isolated test database, so this does not
+demonstrate shared-database contention or network-level load resilience.
+
+The shared-IP test uses three different voters making ten requests each
+to exhaust the 30-request IP allowance. A further valid voter on that IP
+receives HTTP 429 with no submission records written. This documents a
+limitation for legitimate voters sharing a public IP.
+
+The CI workflow installs Redis and runs the shared-storage tests with
+R20_REQUIRE_REDIS=1. Missing redis-server fails that required test run
+instead of skipping it. GitHub Actions results must be checked separately.
