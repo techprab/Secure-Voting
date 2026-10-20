@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app import db
 from app.models import Ballot, Candidate, CountCache
+from app.security.crypto import chain_hash
 from app.services.count import count_a
 
 DIVISION = "Division E"  # same value as tests/slice_e/conftest.py
@@ -76,11 +77,30 @@ def test_r12_tampered_ballot_stops_recount(client, candidates, add_ballots, staf
     blob = bytearray(ballot.blob)
     blob[-1] ^= 0x01
     ballot.blob = bytes(blob)
+    # A careful attacker also rebuilds the hash chain, so only the AES-GCM tag catches it.
+    prev = "0" * 64
+    for row in Ballot.query.order_by(Ballot.id):
+        row.prev_hash, row.hash = prev, chain_hash(prev, row.blob)
+        prev = row.hash
     db.session.commit()
 
     resp = client.post(f"/count/recount/{DIVISION}", headers=auth(staff_token("officer")))
     assert resp.status_code == 409
     assert resp.get_json()["error"] == "ballot_integrity"
+
+
+def test_r12_broken_chain_stops_recount(client, candidates, add_ballots, staff_token, auth):
+    a, b, c = candidates
+    add_ballots([[a, b, c], [b, c, a], [c, a, b]])
+    middle = Ballot.query.order_by(Ballot.id).all()[1]
+    middle.hash = "0" * 64
+    db.session.commit()
+
+    resp = client.post(f"/count/recount/{DIVISION}", headers=auth(staff_token("officer")))
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "chain_broken"
+    assert CountCache.query.filter_by(division=DIVISION).count() == 0
 
 
 def test_r12_recount_needs_officer_with_mfa(client, candidates, staff_token, auth):
