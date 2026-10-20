@@ -53,7 +53,7 @@ def ensure_staff(role):
             password_hash=bcrypt.hashpw(
                 f"LocalOnly-{role}-{secrets.token_urlsafe(12)}".encode("utf-8"),
                 bcrypt.gensalt(),
-                ).decode("utf-8"),
+            ).decode("utf-8"),
             # Local development placeholder only.
             # Replace with a properly provisioned TOTP secret if testing MFA.
             totp_secret="JBSWY3DPEHPK3PXP",
@@ -117,7 +117,7 @@ def ensure_voters():
         demo_voter.password_hash=bcrypt.hashpw(
             b"LocalOnly-Voter-ChangeMe",
             bcrypt.gensalt(),
-            ).decode("utf-8"),
+        ).decode("utf-8")
 
     for division_index, division in enumerate(DIVISIONS):
         for number in range(1, VOTERS_PER_DIVISION + 1):
@@ -132,9 +132,10 @@ def ensure_voters():
                     overseas=(
                         division_index == 0 and number <= 5
                     ),
-                    password_hash=generate_password_hash(
-                        "LocalOnly-Voter-ChangeMe"
-                    ),
+                    password_hash=bcrypt.hashpw(
+                        b"LocalOnly-Voter-ChangeMe",
+                        bcrypt.gensalt(),
+                    ).decode("utf-8"),
                 )
                 db.session.add(voter)
             else:
