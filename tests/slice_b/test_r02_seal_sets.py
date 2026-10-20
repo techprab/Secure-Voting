@@ -188,6 +188,7 @@ def test_r02_sealing_waits_for_the_lock(app):
         worker.join(timeout=0.3)
         assert worker.is_alive(), "sealing must wait while another request holds the lock"
         assert len(_sealed()) == 0
+        db.session.rollback()  # end this read before the other request uses the connection
     worker.join(timeout=5)
     assert not worker.is_alive()
     assert result["sealed"] == 20
