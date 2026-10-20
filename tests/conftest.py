@@ -26,73 +26,70 @@ def client(app):
 @pytest.fixture()
 def voter_token(app):
     def _token(voter_id=1):
-        with app.app_context():
-            voter = db.session.get(Voter, voter_id)
+        voter = db.session.get(Voter, voter_id)
 
-            if voter is None:
-                voter = Voter(
-                    id=voter_id,
-                    name=f"Test Voter {voter_id}",
-                    division="Test Division",
-                    eligible=True,
-                    overseas=False,
-                    password_hash=generate_password_hash(
-                        "test-password"
-                    ),
-                )
-                db.session.add(voter)
-                db.session.commit()
-
-            return create_access_token(
-                identity=str(voter.id),
-                additional_claims={
-                    "type": "voter",
-                    "division": voter.division,
-                },
+        if voter is None:
+            voter = Voter(
+                id=voter_id,
+                name=f"Test Voter {voter_id}",
+                division="Test Division",
+                eligible=True,
+                overseas=False,
+                password_hash=generate_password_hash(
+                    "test-password"
+                ),
             )
+            db.session.add(voter)
+            db.session.commit()
+
+        return create_access_token(
+            identity=str(voter.id),
+            additional_claims={
+                "type": "voter",
+                "division": voter.division,
+            },
+        )
 
     return _token
 
 @pytest.fixture()
 def staff_token(app):
     """Create a JWT for a Staff row with the requested role."""
-    from datetime import date, timedelta
 
     def _token(role="auditor", mfa=True, staff_id=None):
-        with app.app_context():
-            if staff_id is None:
-                staff = (
-                    Staff.query
-                    .filter_by(role=role)
-                    .order_by(Staff.id)
-                    .first()
-                )
-            else:
-                staff = db.session.get(Staff, staff_id)
-
-            if staff is None:
-                staff = Staff(
-                    id=staff_id,
-                    username=f"test-{role}-{staff_id if staff_id is not None else 'auto'}",
-                    role=role,
-                    password_hash="unused",
-                    totp_secret="unused",
-                    recertified_until=date.today() + timedelta(days=90),
-                )
-                db.session.add(staff)
-                db.session.commit()
-
-            assert staff.role == role, (
-                f"Staff {staff.id} is a {staff.role}, not a {role}"
+        if staff_id is None:
+            staff = (
+                Staff.query
+                .filter_by(role=role)
+                .order_by(Staff.id)
+                .first()
             )
+        else:
+            staff = db.session.get(Staff, staff_id)
 
-            return create_access_token(
-                identity=str(staff.id),
-                additional_claims={
-                    "type": "staff",
-                    "role": role,
-                    "mfa": mfa,
-                },
+        if staff is None:
+            staff = Staff(
+                id=staff_id,
+                username=f"test-{role}-{staff_id if staff_id is not None else 'auto'}",
+                role=role,
+                password_hash="unused",
+                totp_secret="unused",
+                recertified_until=date.today() + timedelta(days=90),
             )
+            db.session.add(staff)
+            db.session.commit()
+
+        assert staff.role == role, (
+            f"Staff {staff.id} is a {role}, not a {staff.role}"
+        )
+
+        return create_access_token(
+            identity=str(staff.id),
+            additional_claims={
+                "type": "staff",
+                "role": role,
+                "mfa": mfa,
+            },
+        )
 
     return _token
