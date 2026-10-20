@@ -23,6 +23,10 @@ def recertify(staff_id):
     if staff is None:
         return jsonify(error="staff_not_found"), 404
 
+    # Prevent an administrator from renewing their own recertification.
+    if staff_id == g.staff.id:
+        return jsonify(error="self_recertification_not_allowed"), 403
+
     previous_date = staff.recertified_until
     staff.recertified_until = date.today() + timedelta(days=90)
     g.audit_before = {
