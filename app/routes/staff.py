@@ -10,7 +10,7 @@ from flask_jwt_extended import (
     verify_jwt_in_request,
 )
 
-from .. import db
+from .. import db, limiter
 from ..models import Staff
 from ..security.staff_guard import require_staff, audited
 
@@ -18,6 +18,7 @@ bp = Blueprint("staff", __name__, url_prefix="/staff")
 
 
 @bp.post("/login")
+@limiter.limit("5 per minute")
 def staff_login():
     data = request.get_json(silent=True) or {}
     username = data.get("username")
@@ -56,6 +57,7 @@ def staff_login():
 
 
 @bp.post("/mfa")
+@limiter.limit("5 per minute")
 def staff_mfa():
     verify_jwt_in_request()
     claims = get_jwt()
