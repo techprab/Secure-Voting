@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
@@ -44,13 +44,23 @@ def create_app(config_object=Config):
     def health():
         return jsonify(status="ok", message="Secure Voting skeleton is running"), 200
 
-    # STUB — R-09: production HTTPS enforcement/HSTS must be implemented and tested.
+    # R-09: reject plain HTTP and add HSTS when HTTPS is required.
+    @app.before_request
+    def enforce_https():
+        if (
+            app.config.get("REQUIRE_HTTPS", False)
+            and not app.debug
+            and not app.testing
+            and not request.is_secure
+        ):
+            return jsonify(error="https_required"), 400
+
     @app.after_request
     def security_headers(response):
         if app.config.get("REQUIRE_HTTPS", False):
             response.headers.setdefault(
                 "Strict-Transport-Security",
-                "max-age=31536000; includeSubDomains"
+                "max-age=31536000; includeSubDomains",
             )
         return response
 
