@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import app.services.count as count_service
 from app import db
 from app.errors import ReleaseBlocked
-from app.models import Ballot, Candidate, CountCache
+from app.models import Ballot, Candidate, CountCache, ResultRelease
 from app.services.count import count_a, count_b, release_check
 
 DIVISION = "Division E"  # same value as tests/slice_e/conftest.py
@@ -55,6 +55,19 @@ def test_r19_broken_chain_blocks_release(candidates, add_ballots):
 
     with pytest.raises(ReleaseBlocked):
         release_check(DIVISION)
+
+
+def test_r19_release_endpoint_refuses_when_tallies_disagree(
+        client, candidates, add_ballots, staff_token, auth, signing_key, monkeypatch):
+    a, b, c = candidates
+    add_ballots([[a, b, c]] * 2)
+    monkeypatch.setattr(count_service, "count_b", lambda division: {a: 1, b: 0, c: 0})
+
+    resp = client.post(f"/results/release/{DIVISION}", headers=auth(staff_token("officer")))
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "release_blocked"
+    assert ResultRelease.query.count() == 0
 
 
 def test_r19_release_gate_never_reads_count_cache(candidates, add_ballots):

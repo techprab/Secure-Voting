@@ -3,24 +3,35 @@
 R-12  POST /count/recount/<division>        officer + MFA, recomputes from sealed ballots
 R-21  POST /exclusions                      delegate, first approval of a court-ordered exclusion
       POST /exclusions/<id>/approve         a *different* delegate, within 15 minutes
+R-22  POST /results/release/<division>      officer + MFA, release_check, then ECDSA P-384 signature
+      GET  /results/public-key              public PEM, so anyone can verify offline
+      GET  /results/<division>/latest       latest signed release for external systems
+      POST /results/verify                  {"payload", "signature"} -> {"valid": bool}
 
 Privileged routes stack the decorators as require_staff -> _commit_on_success -> audited,
 so the state change and its audit entry are committed in one transaction, or neither is.
 """
+import base64
+import json
+import os
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import Blueprint, g, jsonify, make_response, request
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from flask import Blueprint, current_app, g, jsonify, make_response, request
 
-from .. import db
-from ..models import Candidate, ExclusionRequest
+from .. import db, limiter
+from ..models import Candidate, ExclusionRequest, ResultRelease
 from ..security.crypto import verify_chain
 from ..security.staff_guard import audited, require_staff
-from ..services.count import UnknownDivision, count_a, write_display_cache
+from ..services.count import UnknownDivision, count_a, release_check, write_display_cache
 
 bp = Blueprint("count", __name__)
 
 EXCLUSION_WINDOW = timedelta(minutes=15)
+SIGNATURE_ALGORITHM = "ECDSA-P384-SHA384"
 
 
 def _now() -> datetime:
@@ -130,6 +141,113 @@ def approve_exclusion(request_id):
     return jsonify(id=req.id, status="applied", candidate_id=candidate.id), 200
 
 
-@bp.get("/results/<path:result_path>")
-def results(result_path):
-    return jsonify(error="not_implemented"), 501  # STUB until R-22
+# --------------------------------------------------------------------------- R-22
+
+class SigningKeyUnavailable(RuntimeError):
+    pass
+
+
+def _signing_key() -> ec.EllipticCurvePrivateKey:
+    """Load the P-384 private key from RESULT_SIGNING_KEY: PEM text, or a path to a PEM file."""
+    value = (current_app.config.get("RESULT_SIGNING_KEY") or "").strip()
+    if not value or value.startswith("replace-with"):
+        raise SigningKeyUnavailable("RESULT_SIGNING_KEY is not configured")
+    if "BEGIN" not in value and os.path.isfile(value):
+        with open(value, "rb") as fh:
+            pem = fh.read()
+    else:
+        pem = value.replace("\\n", "\n").encode("utf-8")
+    try:
+        key = serialization.load_pem_private_key(pem, password=None)
+    except ValueError as exc:
+        raise SigningKeyUnavailable("RESULT_SIGNING_KEY is not a valid PEM key") from exc
+    if not isinstance(key, ec.EllipticCurvePrivateKey) or key.curve.name != "secp384r1":
+        raise SigningKeyUnavailable("RESULT_SIGNING_KEY must be an ECDSA P-384 key")
+    return key
+
+
+def _public_pem(key: ec.EllipticCurvePrivateKey) -> str:
+    return key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("ascii")
+
+
+@bp.post("/results/release/<division>")
+@require_staff("officer", mfa=True)
+@_commit_on_success
+@audited("result_release")
+def release_result(division):
+    try:
+        key = _signing_key()
+    except SigningKeyUnavailable:
+        return jsonify(error="signing_key_unavailable"), 503
+    try:
+        totals = release_check(division)  # raises ReleaseBlocked -> 409 release_blocked
+    except UnknownDivision:
+        return jsonify(error="unknown_division"), 404
+
+    released_at = _now().replace(microsecond=0)
+    payload = json.dumps(
+        {"division": division,
+         "totals": {str(k): v for k, v in totals.items()},
+         "released_at": released_at.isoformat() + "Z"},
+        sort_keys=True, separators=(",", ":"),
+    )
+    signature = base64.b64encode(
+        key.sign(payload.encode("utf-8"), ec.ECDSA(hashes.SHA384()))
+    ).decode("ascii")
+
+    release = ResultRelease(division=division, payload=payload,
+                            signature=signature, released_at=released_at)
+    db.session.add(release)
+    db.session.flush()
+
+    g.audit_after = {"release_id": release.id, "division": division,
+                     "payload_sha384": _sha384_hex(payload)}
+    return jsonify(release_id=release.id, payload=payload, signature=signature,
+                   algorithm=SIGNATURE_ALGORITHM), 201
+
+
+def _sha384_hex(text: str) -> str:
+    digest = hashes.Hash(hashes.SHA384())
+    digest.update(text.encode("utf-8"))
+    return digest.finalize().hex()
+
+
+@bp.get("/results/public-key")
+def public_key():
+    try:
+        key = _signing_key()
+    except SigningKeyUnavailable:
+        return jsonify(error="signing_key_unavailable"), 503
+    return jsonify(algorithm=SIGNATURE_ALGORITHM, public_key=_public_pem(key)), 200
+
+
+@bp.get("/results/<division>/latest")
+def latest_release(division):
+    release = (ResultRelease.query.filter_by(division=division)
+               .order_by(ResultRelease.id.desc()).first())
+    if release is None:
+        return jsonify(error="not_released"), 404
+    return jsonify(release_id=release.id, payload=release.payload,
+                   signature=release.signature, algorithm=SIGNATURE_ALGORITHM), 200
+
+
+@bp.post("/results/verify")
+@limiter.limit("30 per minute")
+def verify_result():
+    body = request.get_json(silent=True) or {}
+    payload, signature = body.get("payload"), body.get("signature")
+    if not isinstance(payload, str) or not isinstance(signature, str):
+        return jsonify(error="bad_request"), 400
+    try:
+        key = _signing_key()
+    except SigningKeyUnavailable:
+        return jsonify(error="signing_key_unavailable"), 503
+    try:
+        key.public_key().verify(base64.b64decode(signature, validate=True),
+                                payload.encode("utf-8"), ec.ECDSA(hashes.SHA384()))
+        valid = True
+    except (InvalidSignature, ValueError):
+        valid = False
+    return jsonify(valid=valid), 200
