@@ -194,9 +194,10 @@ def test_r18_admin_cannot_recertify_self(app, client, staff_token):
     assert response.status_code == 403
     assert response.get_json()["error"] == "self_recertification_not_allowed"
 
-    with app.app_context():
-        unchanged_admin = db.session.get(models.Staff, admin_id)
-        assert unchanged_admin.recertified_until == date.today() + timedelta(days=30)
+    # Reuse the app fixture's context and reload the database state.
+    db.session.expire_all()
+    unchanged_admin = db.session.get(models.Staff, admin_id)
+    assert unchanged_admin.recertified_until == date.today() + timedelta(days=30)
 
 
 def test_r18_rejects_token_when_database_role_changes(
