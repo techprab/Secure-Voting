@@ -1,3 +1,5 @@
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+from flask_limiter.util import get_remote_address
 """Ballot routes. Owner: Jaewook (Slice B).
 
 R-06: GET /ballot serves the candidate list only if it matches the last approved set.
@@ -12,12 +14,12 @@ from datetime import timedelta
 from flask import Blueprint, abort, g, jsonify, request
 from flask_jwt_extended import create_access_token, decode_token
 
-from .. import db
+from .. import db, limiter
 from ..models import Participation, PendingBallot, Voter
 from ..security.crypto import seal_ballot
 from ..security.voter_guard import begin_single_cast, consume_nonce, require_voter
 from ..services.ballot_def import check_ballot_definition, current_candidates
-from ..services.ballots import flush_pending
+from ..services.ballots import commit_with_seal
 
 bp = Blueprint("ballot", __name__)
 
@@ -88,7 +90,16 @@ def ballot_preview():
     return jsonify(summary=summary, preview_token=token), 200
 
 
+def submission_voter_key():
+    # Verify the signature before using identity as a rate-limit key.
+    # Use voter identity, not the rotating session token.
+    verify_jwt_in_request()
+    return "voter:" + str(get_jwt_identity())
+
+
 @bp.post("/ballot/submit")
+@limiter.limit("30 per minute", key_func=get_remote_address)
+@limiter.limit("10 per minute", key_func=submission_voter_key)
 @require_voter
 def ballot_submit():
     voter = current_voter()
@@ -124,15 +135,19 @@ def ballot_submit():
 
     # 3. One transaction: replay check (R-04), one cast per voter (R-01),
     #    encrypted ballot into the pending buffer with no voter reference (R-14, R-02).
-    consume_nonce(nonce)
-    code = begin_single_cast(voter.id)
-    db.session.add(PendingBallot(division=voter.division, blob=seal_ballot(preferences)))
-    flush_pending(voter.division)
-    db.session.commit()
+    try:
+        consume_nonce(nonce)
+        code = begin_single_cast(voter.id)
+        db.session.add(PendingBallot(division=voter.division, blob=seal_ballot(preferences)))
+        commit_with_seal(voter.division)
+    except Exception:
+        db.session.rollback()
+        raise
     return jsonify(participation_code=code), 201
 
 
 @bp.get("/participation/<code>")
+@limiter.limit("30 per minute", key_func=get_remote_address)
 def participation(code):
     """Receipt check: says only that the code exists. No voter, time or ranking is returned."""
     if Participation.query.filter_by(code=code).first() is None:
