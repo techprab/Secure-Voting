@@ -91,12 +91,20 @@ def require_voter(fn):
 
 
 def consume_nonce(nonce: str) -> None:
-    # R-04: records nonce; raises ReplayError if seen before
-    if db.session.get(UsedNonce, nonce):
-        append_audit(action="replay", actor_id=None)
-        raise ReplayError()
-    db.session.add(UsedNonce(nonce=nonce))
-    db.session.flush()
+    """Reserve a nonce in the ballot transaction without committing it."""
+    # The savepoint undoes only this insert on a duplicate. The caller's other
+    # work stays in the transaction; the ballot route owns the full rollback.
+    try:
+        with db.session.begin_nested():
+            db.session.add(UsedNonce(nonce=nonce))
+    except IntegrityError as exc:
+        # The primary key decides replays, including two racing requests.
+        if db.session.get(UsedNonce, nonce) is None:
+            # Do not mislabel an unrelated database error as a replay.
+            raise
+        current_app.logger.warning("R-04: replay submission rejected")
+        raise ReplayError() from exc
+
 
 def begin_single_cast(voter_id: int) -> str:
     # R-01: adds Participation(voter_id) in the current transaction

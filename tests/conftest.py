@@ -55,6 +55,7 @@ def voter_token(app):
 @pytest.fixture()
 def staff_token(app):
     """Create a JWT for a Staff row with the requested role."""
+    from datetime import date, timedelta
 
     def _token(role="auditor", mfa=True, staff_id=None):
         if staff_id is None:
@@ -80,7 +81,7 @@ def staff_token(app):
             db.session.commit()
 
         assert staff.role == role, (
-            f"Staff {staff.id} is a {role}, not a {staff.role}"
+            f"Staff {staff.id} is a {staff.role}, not a {role}"
         )
 
         return create_access_token(
