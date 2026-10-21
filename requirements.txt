@@ -10,3 +10,4 @@ pyOpenSSL==26.4.0
 pytest==9.1.1
 pip-audit==2.10.1
 python-dotenv==1.2.4
+redis==8.1.0
