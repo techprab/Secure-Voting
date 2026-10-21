@@ -124,10 +124,14 @@ def ballot_submit():
 
     # 3. One transaction: replay check (R-04), one cast per voter (R-01),
     #    encrypted ballot into the pending buffer with no voter reference (R-14, R-02).
-    consume_nonce(nonce)
-    code = begin_single_cast(voter.id)
-    db.session.add(PendingBallot(division=voter.division, blob=seal_ballot(preferences)))
-    commit_with_seal(voter.division)
+    try:
+        consume_nonce(nonce)
+        code = begin_single_cast(voter.id)
+        db.session.add(PendingBallot(division=voter.division, blob=seal_ballot(preferences)))
+        commit_with_seal(voter.division)
+    except Exception:
+        db.session.rollback()
+        raise
     return jsonify(participation_code=code), 201
 
 
