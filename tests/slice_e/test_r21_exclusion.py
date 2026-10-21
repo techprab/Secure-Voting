@@ -148,4 +148,7 @@ def test_r21_request_and_audit_survive_the_request(tmp_path):
     with file_app.app_context():
         assert ExclusionRequest.query.count() == 1
         assert [e.action for e in AuditLog.query.all()] == ["exclusion_request"]
+        # End the read transaction first: SQLite will not drop tables under an open one.
+        db.session.remove()
         db.drop_all()
+        db.engine.dispose()
