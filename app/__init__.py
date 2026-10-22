@@ -60,14 +60,25 @@ def create_app(config_object=Config):
         ):
             return jsonify(error="https_required"), 400
 
+    
     @app.after_request
     def security_headers(response):
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "img-src 'self'; object-src 'none'; base-uri 'self'; "
+            "form-action 'self'; frame-ancestors 'none'",
+        )
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+
         if app.config.get("REQUIRE_HTTPS", False):
             response.headers.setdefault(
                 "Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains",
             )
         return response
+
     
     @app.get("/")
     def index():
