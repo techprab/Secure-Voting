@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
@@ -68,5 +68,9 @@ def create_app(config_object=Config):
                 "max-age=31536000; includeSubDomains",
             )
         return response
-
+    
+    @app.get("/")
+    def index():
+        return render_template("index.html")
+    
     return app
