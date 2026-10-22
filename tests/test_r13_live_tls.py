@@ -37,6 +37,30 @@ def issue_certificate(folder, name, issuer=None, purpose=None):
             x509.BasicConstraints(ca=issuer is None, path_length=None),
             critical=True,
         )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(key.public_key()),
+            critical=False,
+        )
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=issuer is None,
+                crl_sign=issuer is None,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                issuer[0].public_key() if issuer else key.public_key()
+            ),
+            critical=False,
+        )
     )
     if purpose:
         builder = builder.add_extension(
