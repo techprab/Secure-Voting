@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
@@ -60,8 +60,18 @@ def create_app(config_object=Config):
         ):
             return jsonify(error="https_required"), 400
 
+    
     @app.after_request
     def security_headers(response):
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "img-src 'self'; object-src 'none'; base-uri 'self'; "
+            "form-action 'self'; frame-ancestors 'none'",
+        )
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+
         if app.config.get("REQUIRE_HTTPS", False):
             response.headers.setdefault(
                 "Strict-Transport-Security",
@@ -69,4 +79,9 @@ def create_app(config_object=Config):
             )
         return response
 
+    
+    @app.get("/")
+    def index():
+        return render_template("index.html")
+    
     return app

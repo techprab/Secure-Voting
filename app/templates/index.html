@@ -1,0 +1,102 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102a43">
+  <title>SecureVote | Voting Platform</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="navbar">
+    <a class="brand" href="/" aria-label="SecureVote home">
+      <span class="brand-mark">✓</span>
+      <span>SecureVote<small>Electronic Voting Platform</small></span>
+    </a>
+    <span class="status"><span class="status-dot"></span> Security enabled</span>
+  </header>
+
+  <main class="layout">
+    <section class="hero">
+      <div class="eyebrow">A SECURE DIGITAL ELECTION</div>
+      <h1>Your voice.<br><span>Your choice.</span></h1>
+      <p>Access your assigned ballot, review your candidate ranking and confirm your vote through a protected submission process.</p>
+      <div class="features">
+        <div><span>01</span><p>Authenticated<br>voter access</p></div>
+        <div><span>02</span><p>Encrypted ballot<br>storage</p></div>
+        <div><span>03</span><p>Integrity<br>verification</p></div>
+      </div>
+      <div class="hero-note">
+        <span class="shield">✓</span>
+        <p><strong>Security comes first</strong><br>Your ballot is processed by the existing server-side security controls.</p>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <div class="panel" id="login-panel">
+        <div class="step-label">STEP 01 · AUTHENTICATION</div>
+        <h2>Welcome back</h2>
+        <p class="subheading">Sign in with your assigned voter credentials.</p>
+
+        <form id="login-form">
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username"
+                 placeholder="Enter your username" required>
+
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password"
+                 autocomplete="current-password"
+                 placeholder="Enter your password" required>
+
+          <button type="submit" id="login-button">Sign in securely <span>→</span></button>
+        </form>
+        <p id="login-message" class="message" role="status" aria-live="polite"></p>
+        <p class="privacy-note">Your credentials are sent to the existing authentication endpoint. They are not stored in this page.</p>
+      </div>
+
+      <div class="panel hidden" id="ballot-panel">
+        <div class="step-label">STEP 02 · YOUR BALLOT</div>
+        <h2>Rank your candidates</h2>
+        <p class="subheading" id="division-label">Loading your assigned division…</p>
+        <div class="notice">Arrange candidates from your first preference to your last preference.</div>
+        <ol id="candidate-list" class="candidate-list"></ol>
+        <button type="button" id="preview-button">Review my ranking <span>→</span></button>
+        <p id="ballot-message" class="message" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="panel hidden" id="preview-panel">
+        <div class="step-label">STEP 03 · REVIEW & CONFIRM</div>
+        <h2>Review your choices</h2>
+        <p class="subheading">Check the ranking carefully before submitting.</p>
+        <ol id="preview-list" class="preview-list"></ol>
+        <label class="confirmation">
+          <input type="checkbox" id="confirm-checkbox">
+          <span>I have reviewed this ranking and confirm that I want to submit this vote.</span>
+        </label>
+        <button type="button" id="submit-button" disabled>Confirm and submit vote</button>
+        <button type="button" id="back-button" class="button-secondary">Go back and edit</button>
+        <p id="submit-message" class="message" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="panel hidden" id="receipt-panel">
+        <div class="success-icon">✓</div>
+        <div class="step-label">SUBMISSION STATUS</div>
+        <h2>Participation recorded</h2>
+        <p class="subheading">Keep your receipt private. It confirms participation, not your candidate ranking.</p>
+        <label for="receipt-code">Participation receipt</label>
+        <code id="receipt-code" class="receipt-code"></code>
+        <button type="button" id="check-receipt-button" class="button-secondary">Verify participation receipt</button>
+        <p id="receipt-message" class="message" role="status" aria-live="polite"></p>
+        <button type="button" id="logout-button">Finish session</button>
+      </div>
+
+      <footer>
+        SecureVote academic prototype<br>
+        Authentication and ballot security are enforced by the backend.
+      </footer>
+    </section>
+  </main>
+</body>
+</html>
